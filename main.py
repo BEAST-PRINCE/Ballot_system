@@ -1,4 +1,6 @@
 import mysql.connector as sql
+import matplotlib.pyplot as plt
+import numpy as np
 from prettytable import PrettyTable
 import re
 import hashlib
@@ -20,7 +22,9 @@ def dbms_connect(password):
 
 
 def close_connection():
-    global conn_obj
+    global conn_obj, cursr
+    cursr.close()
+    conn_obj.commit()
     conn_obj.close()
 
 
@@ -98,7 +102,7 @@ def validate_election_id(election_id, admin_id):
 
 def insert_admin_values():
     department = validate_input("Enter department: ", r'^[A-Za-z]{1,5}$')
-    name = validate_input("Enter name: ", r'^[A-Za-z]{1,30}$')
+    name = validate_input("Enter name: ", r'^[A-Za-z ]{1,30}$')
     admin_id = validate_input("Enter admin ID: ", r'^\d+$')
     phone = validate_input("Enter phone (10 digits): ", r'^\d{10}$')
     passwd = getpass.getpass("Enter your password: ")
@@ -127,7 +131,7 @@ def insert_posts_values():
 def insert_voters_values():
     usn = validate_input("Enter USN (10 characters): ", r'^[A-Za-z0-9]{10}$')
     department = validate_input("Enter department: ", r'^[A-Za-z]{1,5}$')
-    name = validate_input("Enter name : ", r'^[A-Za-z]{1,30}$')
+    name = validate_input("Enter name : ", r'^[A-Za-z ]{1,30}$')
     phone = validate_input("Enter phone (10 digits): ", r'^\d{10}$')
     email = validate_input("Enter email: ", r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
     semester = validate_input("Enter semester: ", r'^\d{1}$')
@@ -248,16 +252,67 @@ def login_voter(id, password):
         return result[0][2], result[0]
 
 
+def generate_bar_graph(candidates, total_votes, election_id, post_id):
+    fig = plt.figure(figsize=(10, 6))
+    plt.bar(candidates, total_votes, color='blue')
+    plt.legend()
+    plt.xlabel('Candidate ID')
+    plt.ylabel('Total Votes')
+    plt.title(f'Results for Post {post_id} of Election {election_id}')
+    plt.savefig(f'results/bar_e{election_id}_p{post_id}.png')
+    plt.show()
+
+
+def generate_pie_chart(candidates, total_votes, election_id, post_id):
+    # fig = plt.figure(figsize=(10, 6))
+    # plt.pie(total_votes, labels=candidates, autopct='%1.1f%%', startangle=120)
+    # plt.axis('equal')
+    # plt.title('Percentage of Votes for Each Candidate')
+    # plt.savefig(f'results/pie_e{election_id}_p{post_id}.png')
+    # plt.show()
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    wedges, texts, autotexts = ax.pie(total_votes, labels=candidates, autopct='%1.1f%%', startangle=120)
+    ax.legend(wedges, candidates, title='Candidates', loc='center left', bbox_to_anchor=(1, 0, 0.5, 1))
+    plt.setp(autotexts, size=8, weight="bold")
+    ax.set_title(f'Results for Post {post_id} of Election {election_id}')
+    plt.savefig(f'results/pie_e{election_id}_p{post_id}.png')
+
+    # Show the plot
+    plt.show()
+
+
+def generate_result(election_id, plot_choice):
+    cursr.execute(f"SELECT DISTINCT POSTID FROM VOTE_COUNT WHERE ELECTIONID={election_id}")
+    res = cursr.fetchall()
+    if res:
+        cursr.execute(f"SELECT POST_ID FROM POSTS WHERE ELECTIONID={election_id}")
+        posts = cursr.fetchall()
+        for i in posts:
+            cursr.execute(f"SELECT CANDIDATEID, TOTAL_VOTES FROM VOTE_COUNT WHERE POSTID={i[0]} AND ELECTIONID={election_id}")
+            votes = cursr.fetchall()
+            candidates = [row[0] for row in votes]
+            total_votes = [row[1] for row in votes]
+            if plot_choice==1:
+                generate_bar_graph(candidates,total_votes, election_id, i[0])
+            else:
+                generate_pie_chart(candidates, total_votes, election_id, i[0])
+
+
+
+
+
+
 if __name__ == '__main__':
     dbms_connect('divyanshu2345prince')
     create_database()
     while True:
-        print("Welcome to Voting System!!!\n")
+        print("\nWelcome to Voting System!!!\n")
         choice = int(input("1. LOGIN \n2. SIGN UP \n3. EXIT \nEnter your response: "))
         if choice == 1:
-            choice2 = int(input("Login as: \n1. ADMIN \n2. VOTER \nEnter your response:"))
+            choice2 = int(input("\nLogin as: \n1. ADMIN \n2. VOTER \nEnter your response:"))
             if choice2 == 1:
-                print("Please enter the following required parameters: ")
+                print("\nPlease enter the following required parameters: ")
                 id = int(input("Enter Admin ID: "))
                 passwd = getpass.getpass("Enter Password: ")
                 name, user_data = login_admin(id, passwd)
@@ -265,7 +320,7 @@ if __name__ == '__main__':
                     print("\nWelcome ",name)
                     while(True):
                         print("\nSelect what you want to do: \n")
-                        choice3 = int(input("1. Create a new Election \n2. View all Elections \n3. View Candidates of a election \n4. View Election details \n5. Make changes in a Election \n6. LOG OUT \nEnter your response: "))
+                        choice3 = int(input("1. Create a new Election \n2. View all Elections \n3. View Candidates of a election \n4. View Election details \n5. Make changes in a Election \n6. Generate Election Results \n7. LOG OUT \nEnter your response: "))
                         if choice3 == 1:
                             insert_election_values(user_data[2])
                         elif choice3 == 2:
@@ -278,24 +333,38 @@ if __name__ == '__main__':
                             if election_id:
                                 show_election_details(user_data[2],election_id)
                         elif choice3 == 5:
-                            print("\nSelect what change you want to do: \n")
-                            choice4 = int(input("1. Add Candidate \n2. Remove Candidate \n3. Change year of election \n4. Add a Post \n5. GO BACK \nEnter your response: "))
-                            if choice4 == 1:
-                                insert_candidates_values(user_data[2])
-                            elif choice4 == 2:
-                                remove_candidate(user_data[2])
-                            elif choice4 == 3:
-                                election_id = validate_input("Enter election ID: ", r'^\d+$')
-                                year = validate_input("Enter election year: ", r'^\d{4}$')
-                                if year <= datetime.today().year:
-                                    print("\nEnter a valid election year.")
+                            while True:
+                                print("\nSelect what change you want to do: \n")
+                                choice4 = int(input("1. Add Candidate \n2. Remove Candidate \n3. Change year of election \n4. Add a Post \n5. GO BACK \nEnter your response: "))
+                                if choice4 == 1:
+                                    insert_candidates_values(user_data[2])
+                                elif choice4 == 2:
+                                    remove_candidate(user_data[2])
+                                elif choice4 == 3:
+                                    election_id = validate_input("Enter election ID: ", r'^\d+$')
+                                    year = validate_input("Enter election year: ", r'^\d{4}$')
+                                    if year <= datetime.today().year:
+                                        print("\nEnter a valid election year.")
+                                    else:
+                                        cursr.execute(F"UPDATE ELECTION SET YEAR={year} WHERE ELECTION_ID={election_id}")
+                                elif choice4 == 4:
+                                    insert_posts_values()
+                                elif choice4 == 5:
+                                    break
                                 else:
-                                    cursr.execute(F"UPDATE ELECTION SET YEAR={year} WHERE ELECTION_ID={election_id}")
-                            elif choice4 == 4:
-                                insert_posts_values()
-                            elif choice4 == 5:
-                                pass
+                                    print("Pleease enter a valid input.")
                         elif choice3 == 6:
+                            cursr.execute(f"SELECT ELECTION_ID FROM ELECTION WHERE ADMINID={user_data[2]} AND ELECTION_ID IN (SELECT DISTINCT ELECTIONID FROM VOTE_COUNT)")
+                            elections = cursr.fetchall()
+                            if elections:
+                                print("\nSelect the election to generate Results:")
+                                for i in range(len(elections)):
+                                    print(str(i+1)+".",elections[i][0])
+                                election_id = elections[int(input("Enter your response: "))-1][0]
+                                plot_choice = int(input("\nWhat type of Result you want to generate? \n1. Bar Graph \n2. Pie Chart \nEnter your response: "))
+                                generate_result(election_id, plot_choice)
+
+                        elif choice3 == 7:
                             break                      
                         else:
                             print("Invalid input.")
@@ -305,15 +374,15 @@ if __name__ == '__main__':
             
             
             elif choice2 == 2:
-                print("Please enter the following required parameters: ")
+                print("\nPlease enter the following required parameters: ")
                 id = validate_input("Enter USN (10 characters): ", r'^[A-Za-z0-9]{10}$')
                 if id:
                     passwd = getpass.getpass("Enter Password: ")
                     name, user_data = login_voter(id, passwd)
                     if name:
-                        print("Welcome ",name)
+                        print("\nWelcome ",name)
                         while True:
-                            choice3 = int(input("1. Vote in a election \n2. Log Out \nEnter your response: "))
+                            choice3 = int(input("\n1. Vote in a election \n2. Log Out \nEnter your response: "))
                             if choice3 ==1:
                                 
                                 cursr.execute(f"SELECT ELECTION_ID FROM ELECTION WHERE YEAR>={datetime.datetime.now().year}")
@@ -341,11 +410,13 @@ if __name__ == '__main__':
                                             vote = int(input("Enter your vote: "))
                                             if vote<=len(candidates):
                                                 try:
-                                                    cursr.execute(f"INSERT INTO VOTES VALUES (\'{user_data[0]}\', {vote_in_election}, {i[0]}, \'{candidates[j][0]}\')")
+                                                    print(f"INSERT INTO VOTES VALUES (\'{user_data[0]}\', {vote_in_election}, {i[0]}, \'{candidates[vote-1][0]}\')")
+                                                    cursr.execute(f"INSERT INTO VOTES VALUES (\'{user_data[0]}\', {vote_in_election}, {i[0]}, \'{candidates[vote-1][0]}\');")
+                                                    conn_obj.commit()
                                                     print("Vote registered successfully")
                                                     break
                                                 except:
-                                                    print(f"INSERT INTO VOTES VALUES (\'{user_data[0]}\', {vote_in_election}, {i[0]}, \'{candidates[j][0]}\')")
+                                                    print(f"INSERT INTO VOTES VALUES (\'{user_data[0]}\', {vote_in_election}, {i[0]}, \'{candidates[vote-1][0]}\')")
                                                     print("Failed to register the vote.")
                                             else:
                                                 print("Please enter a valid vote.")
@@ -361,7 +432,7 @@ if __name__ == '__main__':
                 print("Invalid response.")   
 
         elif choice == 2:
-            choice2 = int(input("Sign up as: \n1. ADMIN \n2. VOTER \nEnter your response:"))
+            choice2 = int(input("\nSign up as: \n1. ADMIN \n2. VOTER \nEnter your response:"))
             if choice2 == 1:
                 print("Please enter the following required parameters: ")
                 insert_admin_values()
@@ -379,4 +450,5 @@ if __name__ == '__main__':
             break
         else:
             print("Please enter a valid choice:")
+    
     close_connection()
