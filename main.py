@@ -249,7 +249,7 @@ def login_voter(id, password):
 
 
 if __name__ == '__main__':
-    dbms_connect('divyanshu2345prince')
+    dbms_connect('')
     create_database()
     while True:
         print("Welcome to Voting System!!!\n")
