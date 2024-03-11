@@ -304,7 +304,7 @@ def generate_result(election_id, plot_choice):
 
 
 if __name__ == '__main__':
-    dbms_connect('divyanshu2345prince')
+    dbms_connect('')
     create_database()
     while True:
         print("\nWelcome to Voting System!!!\n")
